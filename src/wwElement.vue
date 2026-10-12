@@ -1,6 +1,7 @@
 <template>
   <div class="gx" :style="rootStyle">
-    <div v-if="!rows.length" class="gx-empty">{{ emptyText }}</div>
+    <div v-if="errMsg" class="gx-empty gx-error">Gantt error — {{ errMsg }}</div>
+    <div v-else-if="!rows.length" class="gx-empty">{{ emptyText }}</div>
     <div v-else class="gx-scroll" :style="{ maxHeight: maxHeight || 'none' }">
       <div class="gx-inner" :style="{ width: leftW + totalPx + 'px' }">
         <div class="gx-head">
@@ -112,6 +113,17 @@ export default {
       return isNaN(v) ? fallback : v;
     };
 
+    const errMsg = ref('');
+    const guard = (name, fn, fallback) => () => {
+      try {
+        return fn();
+      } catch (e) {
+        const msg = name + ': ' + ((e && e.message) || e);
+        Promise.resolve().then(() => { errMsg.value = msg; });
+        return typeof fallback === 'function' ? fallback() : fallback;
+      }
+    };
+
     let setSelected = () => {};
     try {
       if (typeof wwLib !== 'undefined') {
@@ -203,7 +215,7 @@ export default {
       return 'progress';
     };
 
-    const origin = computed(() => {
+    const origin = computed(guard('origin', () => {
       const dates = [];
       const push = it => { if (it.start) dates.push(it.start, it.end); };
       tasks.value.forEach(push);
@@ -219,7 +231,7 @@ export default {
       const lo = ov || new Date(min.getTime() - 3 * DAY);
       const hi = ovE || new Date(max.getTime() + 7 * DAY);
       return { lo, days: Math.max(14, Math.round((hi - lo) / DAY) + 1) };
-    });
+    }, () => ({ lo: startOfDay(new Date()), days: 30 })));
 
     const totalDays = computed(() => origin.value.days);
     const totalPx = computed(() => totalDays.value * pxPerDay.value);
@@ -227,7 +239,7 @@ export default {
     const dateAt = i => new Date(origin.value.lo.getFullYear(), origin.value.lo.getMonth(), origin.value.lo.getDate() + i);
     const fmt = d => d.toLocaleDateString(locale.value, { day: 'numeric', month: 'short' });
 
-    const rows = computed(() => {
+    const rows = computed(guard('rows', () => {
       const out = [];
       const auto = !!c('autoParentProgress', false);
       const sorted = [...tasks.value].sort((a, b) => (a.start || 0) - (b.start || 0));
@@ -244,7 +256,7 @@ export default {
         if (open) subs.forEach(s => out.push(decorate(s, {})));
       });
       return out;
-    });
+    }, []));
 
     function decorate(it, extra) {
       const kind = kindOf(it);
@@ -279,7 +291,7 @@ export default {
       };
     };
 
-    const ticks = computed(() => {
+    const ticks = computed(guard('ticks', () => {
       const mode = c('viewMode', 'day');
       const idx = [];
       for (let i = 0; i < totalDays.value; i++) {
@@ -298,9 +310,9 @@ export default {
             : d.toLocaleDateString(locale.value, { month: 'short' });
         return { key: i, left: i * pxPerDay.value, width: (next - i) * pxPerDay.value, label };
       });
-    });
+    }, []));
 
-    const months = computed(() => {
+    const months = computed(guard('months', () => {
       const out = [];
       let startI = 0;
       for (let i = 1; i <= totalDays.value; i++) {
@@ -318,7 +330,7 @@ export default {
         }
       }
       return out;
-    });
+    }, []));
 
     const weekends = computed(() => {
       if (!c('showWeekends', true) || pxPerDay.value < 10) return [];
@@ -360,7 +372,7 @@ export default {
     }));
 
     return {
-      rows, ticks, months, weekends, todayLeft, totalPx, pxPerDay, leftW, rowH, rootStyle,
+      errMsg, rows, ticks, months, weekends, todayLeft, totalPx, pxPerDay, leftW, rowH, rootStyle,
       toggle, onBarClick, barStyle,
       showToday: computed(() => !!c('showToday', true)),
       showPriority: computed(() => !!c('showPriority', true)),
@@ -374,7 +386,8 @@ export default {
 </script>
 
 <style scoped>
-.gx { background: var(--gx-bg); color: var(--gx-text); border: 1px solid var(--gx-border); border-radius: var(--gx-radius); overflow: hidden; width: 100%; box-sizing: border-box; }
+.gx { min-height: 60px; background: var(--gx-bg); color: var(--gx-text); border: 1px solid var(--gx-border); border-radius: var(--gx-radius); overflow: hidden; width: 100%; box-sizing: border-box; }
+.gx-error { color: #d64545; white-space: pre-wrap; }
 .gx-empty { padding: 32px; text-align: center; color: var(--gx-text2); }
 .gx-scroll { overflow: auto; position: relative; }
 .gx-inner { position: relative; min-width: 100%; }
