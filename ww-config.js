@@ -60,7 +60,7 @@ export default {
 
     // ---------- Field mapping ----------
     clientField: text('Tasks: client id field', 'client_id'),
-    clientNameField: text('Tasks: client name field (optional, e.g. clients.name)', ''),
+    clientNameField: text('Tasks: client name field (auto-detected: clients.name, client.name, client_name)', ''),
     clientsIdField: text('Clients: id field', 'id'),
     clientsNameField: text('Clients: name field', 'name'),
     idField: text('Field: id', 'id'),

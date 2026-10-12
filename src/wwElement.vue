@@ -181,6 +181,16 @@ export default {
 
     const today = computed(() => startOfDay(new Date()));
 
+    const findClientName = raw => {
+      const f = c('clientNameField', '');
+      if (f) return getPath(raw, f);
+      const x = raw.clients !== undefined ? raw.clients : raw.client;
+      if (typeof x === 'string') return x;
+      const o = Array.isArray(x) ? x[0] : x;
+      if (o && typeof o === 'object') return o.name || o.company_name || o.client_name;
+      return raw.client_name || raw.clientName;
+    };
+
     const normalize = (raw, isSub, parentId) => {
       const idF = c('idField', 'id');
       const created = toDate(raw[c('createdField', 'created_at')]);
@@ -205,7 +215,7 @@ export default {
         progress,
         sort: Number(raw[c('sortField', 'sort_order')]) || 0,
         clientId: raw[c('clientField', 'client_id')],
-        clientName: c('clientNameField', '') ? getPath(raw, c('clientNameField', '')) : undefined,
+        clientName: findClientName(raw),
       };
     };
 
