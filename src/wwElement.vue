@@ -5,7 +5,18 @@
     <div v-else class="gx-scroll" :style="{ maxHeight: maxHeight || 'none' }">
       <div class="gx-inner" :style="{ width: leftW + totalPx + 'px' }">
         <div class="gx-head">
-          <div class="gx-left gx-hleft">{{ headerLabel }}</div>
+          <div class="gx-left gx-hleft">
+            <select
+              v-if="showClientFilter && !externalFilter && clientOptions.length"
+              v-model="selectedClient"
+              class="gx-select"
+              @change="onClientChange"
+            >
+              <option value="">{{ allClientsLabel }}</option>
+              <option v-for="o in clientOptions" :key="o.id" :value="o.id">{{ o.name }}</option>
+            </select>
+            <span v-else>{{ headerLabel }}</span>
+          </div>
           <div class="gx-hright" :style="{ width: totalPx + 'px' }">
             <div class="gx-months">
               <div
@@ -47,22 +58,23 @@
             v-for="r in rows"
             :key="r.key"
             class="gx-row"
-            :class="{ 'gx-sub': r.isSub }"
+            :class="{ 'gx-sub': r.isSub, 'gx-clientrow': r.isClient }"
             :style="{ height: rowH + 'px' }"
           >
-            <div class="gx-left gx-cell" :style="{ paddingLeft: r.isSub ? '36px' : '8px' }">
+            <div class="gx-left gx-cell" :style="{ paddingLeft: 8 + r.depth * 18 + (r.isSub ? 18 : 0) + 'px' }">
               <span
                 v-if="!r.isSub"
                 class="gx-toggle"
                 :class="{ 'gx-toggle-off': !r.hasChildren }"
-                @click="toggle(r.id)"
+                @click="toggle(r.openKey)"
               >
                 <svg v-if="r.hasChildren" width="12" height="12" viewBox="0 0 12 12" :style="{ transform: r.open ? 'rotate(90deg)' : 'none' }">
                   <path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
               </span>
-              <span v-if="!r.isSub && showPriority" class="gx-prio" :style="{ background: r.prioColor }" />
-              <span class="gx-name" :class="{ 'gx-name-main': !r.isSub }" :title="r.name">{{ r.name }}</span>
+              <span v-if="!r.isSub && !r.isClient && showPriority" class="gx-prio" :style="{ background: r.prioColor }" />
+              <span class="gx-name" :class="{ 'gx-name-main': !r.isSub, 'gx-name-client': r.isClient }" :title="r.name">{{ r.name }}</span>
+              <span v-if="r.isClient" class="gx-count">{{ r.count }}</span>
             </div>
 
             <div class="gx-track" :style="{ width: totalPx + 'px' }">
@@ -94,6 +106,7 @@ const toDate = v => {
   const d = new Date(v);
   return isNaN(d.getTime()) ? null : startOfDay(d);
 };
+const getPath = (o, path) => String(path).split('.').reduce((a, k) => (a == null ? a : a[k]), o);
 const list = v => String(v || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 
 export default {
@@ -150,6 +163,9 @@ export default {
       return n('dayWidthDay', 32);
     });
     const locale = computed(() => c('locale', 'en-NZ'));
+    const selectedClient = ref('');
+    const externalFilter = computed(() => String(c('filterClientId', '')) !== '');
+    const activeClient = computed(() => (externalFilter.value ? String(c('filterClientId', '')) : String(selectedClient.value || '')));
 
     const colorMap = computed(() => ({
       progress: c('colorInProgress', '#2f6fed'),
@@ -188,6 +204,8 @@ export default {
         end: e,
         progress,
         sort: Number(raw[c('sortField', 'sort_order')]) || 0,
+        clientId: raw[c('clientField', 'client_id')],
+        clientName: c('clientNameField', '') ? getPath(raw, c('clientNameField', '')) : undefined,
       };
     };
 
@@ -206,6 +224,36 @@ export default {
       return map;
     });
 
+    const clientsMap = computed(() => {
+      const a = c('clients', []);
+      const m = {};
+      (Array.isArray(a) ? a : []).forEach(r => {
+        if (r) m[String(r[c('clientsIdField', 'id')])] = r[c('clientsNameField', 'name')];
+      });
+      return m;
+    });
+    const clientLabel = (id, fallbackName) => {
+      const k = id === null || id === undefined ? '' : String(id);
+      if (k === '') return c('noClientLabel', 'No client');
+      return clientsMap.value[k] || fallbackName || 'Client ' + k;
+    };
+    const visibleTasks = computed(() => {
+      if (activeClient.value === '') return tasks.value;
+      return tasks.value.filter(t => String(t.clientId === null || t.clientId === undefined ? '' : t.clientId) === activeClient.value);
+    });
+    const clientOptions = computed(() => {
+      const seen = {};
+      tasks.value.forEach(t => {
+        if (t.clientId === null || t.clientId === undefined || t.clientId === '') return;
+        const k = String(t.clientId);
+        if (!seen[k]) seen[k] = { id: k, name: clientLabel(k, t.clientName) };
+      });
+      return Object.values(seen).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    });
+    const onClientChange = () => {
+      emit('trigger-event', { name: 'client-filter-change', event: { value: selectedClient.value } });
+    };
+
     const kindOf = it => {
       const done = list(c('doneStatuses', 'done,completed,complete'));
       const todo = list(c('todoStatuses', 'todo,to do,not started,open,backlog'));
@@ -218,8 +266,7 @@ export default {
     const origin = computed(guard('origin', () => {
       const dates = [];
       const push = it => { if (it.start) dates.push(it.start, it.end); };
-      tasks.value.forEach(push);
-      Object.values(subsByTask.value).forEach(a => a.forEach(push));
+      visibleTasks.value.forEach(t => { push(t); (subsByTask.value[t.id] || []).forEach(push); });
       const ov = toDate(c('startDate', ''));
       const ovE = toDate(c('endDate', ''));
       let min = dates.length ? new Date(Math.min(...dates)) : new Date(today.value);
@@ -242,21 +289,72 @@ export default {
     const rows = computed(guard('rows', () => {
       const out = [];
       const auto = !!c('autoParentProgress', false);
-      const sorted = [...tasks.value].sort((a, b) => (a.start || 0) - (b.start || 0));
-      sorted.forEach(t => {
+      const grouped = !!c('groupByClient', true);
+      const buildTask = (t, depth) => {
         const subs = subsByTask.value[t.id] || [];
-        const open = isOpen(t.id);
+        const open = isOpen('t' + t.id);
         let progress = t.progress;
         if (auto && subs.length) {
-          const w = subs.map(s => (s.start && s.end ? (s.end - s.start) / DAY + 1 : 1));
-          const tot = w.reduce((x, y) => x + y, 0);
-          progress = Math.round(subs.reduce((acc, s, i) => acc + s.progress * w[i], 0) / tot);
+          const w = subs.map(x => (x.start && x.end ? (x.end - x.start) / DAY + 1 : 1));
+          const tot = w.reduce((p, q) => p + q, 0);
+          progress = Math.round(subs.reduce((acc, x, i) => acc + x.progress * w[i], 0) / tot);
         }
-        out.push(decorate({ ...t, progress }, { hasChildren: subs.length > 0, open }));
-        if (open) subs.forEach(s => out.push(decorate(s, {})));
+        out.push(decorate({ ...t, progress }, { hasChildren: subs.length > 0, open, depth, openKey: 't' + t.id }));
+        if (open) subs.forEach(x => out.push(decorate(x, { depth: depth + 1 })));
+      };
+      const sorted = [...visibleTasks.value].sort((x, y) => (x.start || 0) - (y.start || 0));
+      if (!grouped) {
+        sorted.forEach(t => buildTask(t, 0));
+        return out;
+      }
+      const groups = new Map();
+      sorted.forEach(t => {
+        const k = t.clientId === null || t.clientId === undefined ? '' : String(t.clientId);
+        if (!groups.has(k)) groups.set(k, []);
+        groups.get(k).push(t);
+      });
+      const gl = [...groups.entries()]
+        .map(([k, ts]) => ({ k, ts, name: clientLabel(k, ts[0].clientName) }))
+        .sort((x, y) => String(x.name).localeCompare(String(y.name)));
+      gl.forEach(g => {
+        const open = isOpen('c' + g.k);
+        out.push(clientRow(g, open));
+        if (open) g.ts.forEach(t => buildTask(t, 1));
       });
       return out;
     }, []));
+
+    function clientRow(g, open) {
+      const starts = g.ts.filter(t => t.start).map(t => t.start.getTime());
+      const ends = g.ts.filter(t => t.end).map(t => t.end.getTime());
+      const progress = g.ts.length ? Math.round(g.ts.reduce((a, t) => a + t.progress, 0) / g.ts.length) : 0;
+      let bar = null;
+      if (starts.length) {
+        const s0 = new Date(Math.min(...starts));
+        const e0 = new Date(Math.max(...ends));
+        bar = {
+          left: dayIdx(s0) * pxPerDay.value,
+          width: Math.max(pxPerDay.value, (dayIdx(e0) - dayIdx(s0) + 1) * pxPerDay.value),
+        };
+      }
+      return {
+        key: 'c' + g.k,
+        openKey: 'c' + g.k,
+        isClient: true,
+        isSub: false,
+        id: g.k,
+        name: g.name,
+        hasChildren: true,
+        open,
+        depth: 0,
+        count: g.ts.length,
+        progress,
+        bar,
+        color: c('colorClient', '#5b4fd6'),
+        raw: null,
+        tooltip: g.name + ' • ' + g.ts.length + ' task' + (g.ts.length > 1 ? 's' : '') + ' • ' + progress + '%',
+      };
+    }
 
     function decorate(it, extra) {
       const kind = kindOf(it);
@@ -269,6 +367,7 @@ export default {
       }
       return {
         ...it,
+        depth: 0,
         ...extra,
         key: (it.isSub ? 's' : 't') + it.id,
         color,
@@ -279,7 +378,7 @@ export default {
     }
 
     const barStyle = r => {
-      const h = Math.round(rowH.value * (r.isSub ? n('subBarRatio', 0.35) : n('barRatio', 0.55)));
+      const h = Math.round(rowH.value * (r.isClient ? n('clientBarRatio', 0.3) : r.isSub ? n('subBarRatio', 0.35) : n('barRatio', 0.55)));
       return {
         left: r.bar.left + 'px',
         width: r.bar.width + 'px',
@@ -348,6 +447,7 @@ export default {
     });
 
     const onBarClick = r => {
+      if (r.isClient) return;
       setSelected(r.raw);
       emit('trigger-event', {
         name: r.isSub ? 'subtask-click' : 'task-click',
@@ -364,6 +464,7 @@ export default {
       '--gx-grid': c('gridLineColor', '#eef0f3'),
       '--gx-today': c('todayLineColor', '#d64545'),
       '--gx-weekend': c('weekendColor', '#f7f8fa'),
+      '--gx-client-bg': c('clientRowBackground', '#f1f2f7'),
       '--gx-left': leftW.value + 'px',
       '--gx-radius': n('borderRadius', 12) + 'px',
       '--gx-head-h': n('headerHeight', 28) + 'px',
@@ -372,11 +473,13 @@ export default {
     }));
 
     return {
-      errMsg, rows, ticks, months, weekends, todayLeft, totalPx, pxPerDay, leftW, rowH, rootStyle,
+      errMsg, rows, ticks, months, selectedClient, clientOptions, onClientChange, externalFilter, weekends, todayLeft, totalPx, pxPerDay, leftW, rowH, rootStyle,
       toggle, onBarClick, barStyle,
       showToday: computed(() => !!c('showToday', true)),
       showPriority: computed(() => !!c('showPriority', true)),
       showProgressLabel: computed(() => !!c('showProgressLabel', true)),
+      showClientFilter: computed(() => !!c('showClientFilter', true)),
+      allClientsLabel: computed(() => c('allClientsLabel', 'All clients')),
       headerLabel: computed(() => c('headerLabel', 'Task')),
       emptyText: computed(() => c('emptyText', 'No tasks to display')),
       maxHeight: computed(() => c('maxHeight', '')),
@@ -409,6 +512,11 @@ export default {
 .gx-toggle { flex: none; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; color: var(--gx-text2); cursor: pointer; }
 .gx-toggle-off { cursor: default; }
 .gx-toggle svg { transition: transform 0.15s; }
+.gx-clientrow { background: color-mix(in srgb, var(--gx-client-bg) 55%, transparent); }
+.gx-clientrow .gx-left { background: var(--gx-client-bg); }
+.gx-name-client { color: var(--gx-text); font-weight: 600; }
+.gx-count { flex: none; font-size: 0.85em; color: var(--gx-text2); background: var(--gx-bg); border: 1px solid var(--gx-border); border-radius: 999px; padding: 0 7px; line-height: 1.5; }
+.gx-select { width: 100%; font: inherit; color: var(--gx-text); background: transparent; border: 1px solid var(--gx-border); border-radius: 6px; padding: 3px 6px; }
 .gx-prio { flex: none; width: 8px; height: 8px; border-radius: 50%; }
 .gx-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--gx-text2); }
 .gx-name-main { color: var(--gx-text); font-weight: 500; }

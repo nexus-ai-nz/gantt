@@ -18,6 +18,7 @@ export default {
   },
   triggerEvents: [
     { name: 'task-click', label: label('On task bar click'), event: { value: {} } },
+    { name: 'client-filter-change', label: label('On client filter change'), event: { value: '' } },
     { name: 'subtask-click', label: label('On subtask bar click'), event: { value: {} } },
   ],
   properties: {
@@ -28,9 +29,9 @@ export default {
       section: 'settings',
       bindable: true,
       defaultValue: [
-        { id: 1, name: 'Client onboarding flow', status: 'in progress', start_date: '2026-10-05', due_date: '2026-10-17', progress: 80, priority: 1 },
-        { id: 2, name: 'Order management ERP', status: 'in progress', start_date: '2026-10-11', due_date: '2026-11-01', progress: 35, priority: 2 },
-        { id: 3, name: 'Monthly invoicing run', status: 'done', start_date: '2026-10-07', due_date: '2026-10-11', progress: 100, priority: 3 },
+        { id: 1, client_id: 1, name: 'Client onboarding flow', status: 'in progress', start_date: '2026-10-05', due_date: '2026-10-17', progress: 80, priority: 1 },
+        { id: 2, client_id: 1, name: 'Order management ERP', status: 'in progress', start_date: '2026-10-11', due_date: '2026-11-01', progress: 35, priority: 2 },
+        { id: 3, client_id: 2, name: 'Monthly invoicing run', status: 'done', start_date: '2026-10-07', due_date: '2026-10-11', progress: 100, priority: 3 },
       ],
     },
     subtasks: {
@@ -46,7 +47,22 @@ export default {
       ],
     },
 
+    clients: {
+      label: label('Clients'),
+      type: 'Array',
+      section: 'settings',
+      bindable: true,
+      defaultValue: [
+        { id: 1, name: 'Roofing Hub' },
+        { id: 2, name: 'L&A Apparel' },
+      ],
+    },
+
     // ---------- Field mapping ----------
+    clientField: text('Tasks: client id field', 'client_id'),
+    clientNameField: text('Tasks: client name field (optional, e.g. clients.name)', ''),
+    clientsIdField: text('Clients: id field', 'id'),
+    clientsNameField: text('Clients: name field', 'name'),
     idField: text('Field: id', 'id'),
     nameField: text('Field: name', 'name'),
     statusField: text('Field: status', 'status'),
@@ -77,6 +93,11 @@ export default {
     },
     startDate: text('Force chart start (YYYY-MM-DD, optional)', ''),
     endDate: text('Force chart end (YYYY-MM-DD, optional)', ''),
+    groupByClient: toggle('Group tasks under their client', true),
+    showClientFilter: toggle('Show client filter dropdown', true),
+    filterClientId: text('Filter by client id (bind to your own dropdown, optional)', ''),
+    allClientsLabel: text('Filter: "all clients" label', 'All clients'),
+    noClientLabel: text('Label for tasks without a client', 'No client'),
     includeToday: toggle('Always include today in range', true),
     defaultExpanded: toggle('Expand tasks by default', true),
     autoParentProgress: toggle('Parent progress = average of subtasks', false),
@@ -93,6 +114,7 @@ export default {
     rowHeight: num('Row height (px)', 40),
     headerHeight: num('Header row height (px)', 28),
     barRatio: num('Task bar height (0-1)', 0.55, { max: 1, step: 0.05 }),
+    clientBarRatio: num('Client bar height (0-1)', 0.3, { max: 1, step: 0.05 }),
     subBarRatio: num('Subtask bar height (0-1)', 0.35, { max: 1, step: 0.05 }),
     barRadius: num('Bar corner radius (px)', 4),
     trackOpacity: num('Bar background strength (%)', 20, { max: 100 }),
@@ -115,6 +137,8 @@ export default {
     gridLineColor: color('Grid lines', '#eef0f3'),
     weekendColor: color('Weekend shading', '#f7f8fa'),
     todayLineColor: color('Today line', '#d64545'),
+    clientRowBackground: color('Client row background', '#f1f2f7'),
+    colorClient: color('Client bar', '#5b4fd6'),
     colorInProgress: color('Bar: in progress', '#2f6fed'),
     colorDone: color('Bar: done', '#2e9e5b'),
     colorOverdue: color('Bar: overdue', '#d64545'),
