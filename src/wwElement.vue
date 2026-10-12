@@ -1,0 +1,406 @@
+<template>
+  <div class="gx" :style="rootStyle">
+    <div v-if="!rows.length" class="gx-empty">{{ emptyText }}</div>
+    <div v-else class="gx-scroll" :style="{ maxHeight: maxHeight || 'none' }">
+      <div class="gx-inner" :style="{ width: leftW + totalPx + 'px' }">
+        <div class="gx-head">
+          <div class="gx-left gx-hleft">{{ headerLabel }}</div>
+          <div class="gx-hright" :style="{ width: totalPx + 'px' }">
+            <div class="gx-months">
+              <div
+                v-for="m in months"
+                :key="m.key"
+                class="gx-month"
+                :style="{ left: m.left + 'px', width: m.width + 'px' }"
+              >{{ m.label }}</div>
+            </div>
+            <div class="gx-ticks">
+              <div
+                v-for="t in ticks"
+                :key="t.key"
+                class="gx-tick"
+                :style="{ left: t.left + 'px', width: t.width + 'px' }"
+              >{{ t.label }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="gx-body">
+          <div class="gx-layer" :style="{ left: leftW + 'px', width: totalPx + 'px' }">
+            <div
+              v-for="w in weekends"
+              :key="'w' + w"
+              class="gx-weekend"
+              :style="{ left: w + 'px', width: pxPerDay + 'px' }"
+            />
+            <div
+              v-for="t in ticks"
+              :key="'v' + t.key"
+              class="gx-vline"
+              :style="{ left: t.left + 'px' }"
+            />
+            <div v-if="showToday && todayLeft !== null" class="gx-today" :style="{ left: todayLeft + 'px' }" />
+          </div>
+
+          <div
+            v-for="r in rows"
+            :key="r.key"
+            class="gx-row"
+            :class="{ 'gx-sub': r.isSub }"
+            :style="{ height: rowH + 'px' }"
+          >
+            <div class="gx-left gx-cell" :style="{ paddingLeft: r.isSub ? '36px' : '8px' }">
+              <span
+                v-if="!r.isSub"
+                class="gx-toggle"
+                :class="{ 'gx-toggle-off': !r.hasChildren }"
+                @click="toggle(r.id)"
+              >
+                <svg v-if="r.hasChildren" width="12" height="12" viewBox="0 0 12 12" :style="{ transform: r.open ? 'rotate(90deg)' : 'none' }">
+                  <path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </span>
+              <span v-if="!r.isSub && showPriority" class="gx-prio" :style="{ background: r.prioColor }" />
+              <span class="gx-name" :class="{ 'gx-name-main': !r.isSub }" :title="r.name">{{ r.name }}</span>
+            </div>
+
+            <div class="gx-track" :style="{ width: totalPx + 'px' }">
+              <div
+                v-if="r.bar"
+                class="gx-bar"
+                :style="barStyle(r)"
+                :title="r.tooltip"
+                @click="onBarClick(r)"
+              >
+                <div class="gx-fill" :style="{ width: r.progress + '%', background: r.color }" />
+                <span v-if="showProgressLabel && !r.isSub && r.bar.width > 44" class="gx-pct">{{ r.progress }}%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+import { computed, ref } from 'vue';
+
+const DAY = 86400000;
+const startOfDay = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+const toDate = v => {
+  if (!v) return null;
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? null : startOfDay(d);
+};
+const list = v => String(v || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+
+export default {
+  props: {
+    uid: { type: String, required: true },
+    content: { type: Object, required: true },
+    wwEditorState: { type: Object, default: () => ({}) },
+  },
+  emits: ['trigger-event'],
+  setup(props, { emit }) {
+    const c = (key, fallback) => {
+      const v = props.content ? props.content[key] : undefined;
+      return v === undefined || v === null || v === '' ? fallback : v;
+    };
+    const n = (key, fallback) => {
+      const v = Number(c(key, fallback));
+      return isNaN(v) ? fallback : v;
+    };
+
+    let setSelected = () => {};
+    try {
+      if (typeof wwLib !== 'undefined') {
+        const v = wwLib.wwVariable.useComponentVariable({
+          uid: props.uid,
+          name: 'selectedItem',
+          type: 'object',
+          defaultValue: null,
+        });
+        setSelected = v.setValue;
+      }
+    } catch (e) { /* preview outside WeWeb */ }
+
+    const openMap = ref({});
+    const isOpen = id => (openMap.value[id] !== undefined ? openMap.value[id] : !!c('defaultExpanded', true));
+    const toggle = id => { openMap.value = { ...openMap.value, [id]: !isOpen(id) }; };
+
+    const leftW = computed(() => n('leftColumnWidth', 240));
+    const rowH = computed(() => n('rowHeight', 40));
+    const pxPerDay = computed(() => {
+      const m = c('viewMode', 'day');
+      if (m === 'week') return n('dayWidthWeek', 14);
+      if (m === 'month') return n('dayWidthMonth', 5);
+      return n('dayWidthDay', 32);
+    });
+    const locale = computed(() => c('locale', 'en-NZ'));
+
+    const colorMap = computed(() => ({
+      progress: c('colorInProgress', '#2f6fed'),
+      done: c('colorDone', '#2e9e5b'),
+      overdue: c('colorOverdue', '#d64545'),
+      todo: c('colorTodo', '#8a8f98'),
+    }));
+    const prioColors = computed(() => ({
+      1: c('colorPriorityHigh', '#d64545'),
+      2: c('colorPriorityMedium', '#e0a526'),
+      3: c('colorPriorityLow', '#8a8f98'),
+    }));
+
+    const today = computed(() => startOfDay(new Date()));
+
+    const normalize = (raw, isSub, parentId) => {
+      const idF = c('idField', 'id');
+      const created = toDate(raw[c('createdField', 'created_at')]);
+      let s = toDate(raw[c('startField', 'start_date')]);
+      let e = toDate(raw[c('endField', 'due_date')]);
+      if (!s && e) s = created && created <= e ? created : new Date(e.getTime() - DAY);
+      if (s && !e) e = new Date(s.getTime() + DAY);
+      if (s && e && e < s) e = s;
+      let progress = Number(raw[c('progressField', 'progress')]);
+      progress = isNaN(progress) ? 0 : Math.max(0, Math.min(100, Math.round(progress)));
+      const status = String(raw[c('statusField', 'status')] || '').toLowerCase();
+      return {
+        raw,
+        id: raw[idF],
+        parentId,
+        isSub,
+        name: raw[c('nameField', 'name')] || '(untitled)',
+        status,
+        priority: Number(raw[c('priorityField', 'priority')]) || 3,
+        start: s,
+        end: e,
+        progress,
+        sort: Number(raw[c('sortField', 'sort_order')]) || 0,
+      };
+    };
+
+    const tasks = computed(() => {
+      const a = c('tasks', []);
+      return (Array.isArray(a) ? a : []).filter(x => x && typeof x === 'object').map(t => normalize(t, false, null));
+    });
+    const subsByTask = computed(() => {
+      const a = c('subtasks', []);
+      const map = {};
+      (Array.isArray(a) ? a : []).filter(x => x && typeof x === 'object').forEach(s => {
+        const pid = s[c('parentField', 'task_id')];
+        (map[pid] = map[pid] || []).push(normalize(s, true, pid));
+      });
+      Object.values(map).forEach(arr => arr.sort((x, y) => x.sort - y.sort || (x.start || 0) - (y.start || 0)));
+      return map;
+    });
+
+    const kindOf = it => {
+      const done = list(c('doneStatuses', 'done,completed,complete'));
+      const todo = list(c('todoStatuses', 'todo,to do,not started,open,backlog'));
+      if (done.includes(it.status) || it.progress >= 100) return 'done';
+      if (it.end && it.end < today.value) return 'overdue';
+      if (todo.includes(it.status) && it.progress === 0) return 'todo';
+      return 'progress';
+    };
+
+    const origin = computed(() => {
+      const dates = [];
+      const push = it => { if (it.start) dates.push(it.start, it.end); };
+      tasks.value.forEach(push);
+      Object.values(subsByTask.value).forEach(a => a.forEach(push));
+      const ov = toDate(c('startDate', ''));
+      const ovE = toDate(c('endDate', ''));
+      let min = dates.length ? new Date(Math.min(...dates)) : new Date(today.value);
+      let max = dates.length ? new Date(Math.max(...dates)) : new Date(today.value.getTime() + 30 * DAY);
+      if (c('includeToday', true)) {
+        if (today.value < min) min = today.value;
+        if (today.value > max) max = today.value;
+      }
+      const lo = ov || new Date(min.getTime() - 3 * DAY);
+      const hi = ovE || new Date(max.getTime() + 7 * DAY);
+      return { lo, days: Math.max(14, Math.round((hi - lo) / DAY) + 1) };
+    });
+
+    const totalDays = computed(() => origin.value.days);
+    const totalPx = computed(() => totalDays.value * pxPerDay.value);
+    const dayIdx = d => Math.round((d - origin.value.lo) / DAY);
+    const dateAt = i => new Date(origin.value.lo.getFullYear(), origin.value.lo.getMonth(), origin.value.lo.getDate() + i);
+    const fmt = d => d.toLocaleDateString(locale.value, { day: 'numeric', month: 'short' });
+
+    const rows = computed(() => {
+      const out = [];
+      const auto = !!c('autoParentProgress', false);
+      const sorted = [...tasks.value].sort((a, b) => (a.start || 0) - (b.start || 0));
+      sorted.forEach(t => {
+        const subs = subsByTask.value[t.id] || [];
+        const open = isOpen(t.id);
+        let progress = t.progress;
+        if (auto && subs.length) {
+          const w = subs.map(s => (s.start && s.end ? (s.end - s.start) / DAY + 1 : 1));
+          const tot = w.reduce((x, y) => x + y, 0);
+          progress = Math.round(subs.reduce((acc, s, i) => acc + s.progress * w[i], 0) / tot);
+        }
+        out.push(decorate({ ...t, progress }, { hasChildren: subs.length > 0, open }));
+        if (open) subs.forEach(s => out.push(decorate(s, {})));
+      });
+      return out;
+    });
+
+    function decorate(it, extra) {
+      const kind = kindOf(it);
+      const color = colorMap.value[kind];
+      let bar = null;
+      if (it.start && it.end) {
+        const left = dayIdx(it.start) * pxPerDay.value;
+        const width = Math.max(pxPerDay.value, (dayIdx(it.end) - dayIdx(it.start) + 1) * pxPerDay.value);
+        bar = { left, width };
+      }
+      return {
+        ...it,
+        ...extra,
+        key: (it.isSub ? 's' : 't') + it.id,
+        color,
+        prioColor: prioColors.value[Math.min(3, Math.max(1, Math.round(it.priority)))] || prioColors.value[3],
+        bar,
+        tooltip: it.start ? `${it.name} • ${it.progress}% • ${fmt(it.start)} → ${fmt(it.end)}` : it.name,
+      };
+    }
+
+    const barStyle = r => {
+      const h = Math.round(rowH.value * (r.isSub ? n('subBarRatio', 0.35) : n('barRatio', 0.55)));
+      return {
+        left: r.bar.left + 'px',
+        width: r.bar.width + 'px',
+        height: h + 'px',
+        top: Math.round((rowH.value - h) / 2) + 'px',
+        borderColor: r.color,
+        background: `color-mix(in srgb, ${r.color} ${n('trackOpacity', 20)}%, transparent)`,
+        borderRadius: n('barRadius', 4) + 'px',
+      };
+    };
+
+    const ticks = computed(() => {
+      const mode = c('viewMode', 'day');
+      const idx = [];
+      for (let i = 0; i < totalDays.value; i++) {
+        const d = dateAt(i);
+        if (mode === 'day') idx.push(i);
+        else if (mode === 'week' && d.getDay() === 1) idx.push(i);
+        else if (mode === 'month' && d.getDate() === 1) idx.push(i);
+      }
+      return idx.map((i, k) => {
+        const d = dateAt(i);
+        const next = k + 1 < idx.length ? idx[k + 1] : totalDays.value;
+        const label = mode === 'day'
+          ? String(d.getDate())
+          : mode === 'week'
+            ? fmt(d)
+            : d.toLocaleDateString(locale.value, { month: 'short' });
+        return { key: i, left: i * pxPerDay.value, width: (next - i) * pxPerDay.value, label };
+      });
+    });
+
+    const months = computed(() => {
+      const out = [];
+      let startI = 0;
+      for (let i = 1; i <= totalDays.value; i++) {
+        const a = dateAt(i - 1);
+        const b = i < totalDays.value ? dateAt(i) : null;
+        if (!b || b.getMonth() !== a.getMonth()) {
+          const w = (i - startI) * pxPerDay.value;
+          out.push({
+            key: startI,
+            left: startI * pxPerDay.value,
+            width: w,
+            label: w > 60 ? a.toLocaleDateString(locale.value, { month: 'long', year: 'numeric' }) : '',
+          });
+          startI = i;
+        }
+      }
+      return out;
+    });
+
+    const weekends = computed(() => {
+      if (!c('showWeekends', true) || pxPerDay.value < 10) return [];
+      const out = [];
+      for (let i = 0; i < totalDays.value; i++) {
+        const g = dateAt(i).getDay();
+        if (g === 0 || g === 6) out.push(i * pxPerDay.value);
+      }
+      return out;
+    });
+
+    const todayLeft = computed(() => {
+      const i = dayIdx(today.value);
+      return i < 0 || i >= totalDays.value ? null : i * pxPerDay.value + pxPerDay.value / 2;
+    });
+
+    const onBarClick = r => {
+      setSelected(r.raw);
+      emit('trigger-event', {
+        name: r.isSub ? 'subtask-click' : 'task-click',
+        event: { value: r.raw },
+      });
+    };
+
+    const rootStyle = computed(() => ({
+      '--gx-bg': c('backgroundColor', '#ffffff'),
+      '--gx-head-bg': c('headerBackground', '#f6f7f9'),
+      '--gx-text': c('textColor', '#1f2430'),
+      '--gx-text2': c('secondaryTextColor', '#6b7280'),
+      '--gx-border': c('borderColor', '#e3e6ea'),
+      '--gx-grid': c('gridLineColor', '#eef0f3'),
+      '--gx-today': c('todayLineColor', '#d64545'),
+      '--gx-weekend': c('weekendColor', '#f7f8fa'),
+      '--gx-left': leftW.value + 'px',
+      '--gx-radius': n('borderRadius', 12) + 'px',
+      '--gx-head-h': n('headerHeight', 28) + 'px',
+      fontFamily: c('fontFamily', 'inherit'),
+      fontSize: n('fontSize', 13) + 'px',
+    }));
+
+    return {
+      rows, ticks, months, weekends, todayLeft, totalPx, pxPerDay, leftW, rowH, rootStyle,
+      toggle, onBarClick, barStyle,
+      showToday: computed(() => !!c('showToday', true)),
+      showPriority: computed(() => !!c('showPriority', true)),
+      showProgressLabel: computed(() => !!c('showProgressLabel', true)),
+      headerLabel: computed(() => c('headerLabel', 'Task')),
+      emptyText: computed(() => c('emptyText', 'No tasks to display')),
+      maxHeight: computed(() => c('maxHeight', '')),
+    };
+  },
+};
+</script>
+
+<style scoped>
+.gx { background: var(--gx-bg); color: var(--gx-text); border: 1px solid var(--gx-border); border-radius: var(--gx-radius); overflow: hidden; width: 100%; box-sizing: border-box; }
+.gx-empty { padding: 32px; text-align: center; color: var(--gx-text2); }
+.gx-scroll { overflow: auto; position: relative; }
+.gx-inner { position: relative; min-width: 100%; }
+.gx-head { display: flex; position: sticky; top: 0; z-index: 5; background: var(--gx-head-bg); border-bottom: 1px solid var(--gx-border); }
+.gx-left { flex: none; width: var(--gx-left); box-sizing: border-box; position: sticky; left: 0; z-index: 4; background: var(--gx-bg); border-right: 1px solid var(--gx-border); }
+.gx-hleft { background: var(--gx-head-bg); z-index: 6; padding: 0 12px; display: flex; align-items: center; color: var(--gx-text2); }
+.gx-hright { position: relative; flex: none; }
+.gx-months, .gx-ticks { position: relative; height: var(--gx-head-h); }
+.gx-month, .gx-tick { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; padding-left: 6px; box-sizing: border-box; overflow: hidden; white-space: nowrap; color: var(--gx-text2); border-left: 1px solid var(--gx-border); font-size: 0.92em; }
+.gx-tick { border-left-color: var(--gx-grid); border-top: 1px solid var(--gx-grid); }
+.gx-body { position: relative; }
+.gx-layer { position: absolute; top: 0; bottom: 0; z-index: 0; pointer-events: none; }
+.gx-weekend { position: absolute; top: 0; bottom: 0; background: var(--gx-weekend); }
+.gx-vline { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--gx-grid); }
+.gx-today { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px dashed var(--gx-today); z-index: 2; }
+.gx-row { position: relative; z-index: 1; display: flex; border-bottom: 1px solid var(--gx-grid); }
+.gx-row:last-child { border-bottom: none; }
+.gx-cell { display: flex; align-items: center; gap: 6px; padding-right: 8px; overflow: hidden; z-index: 3; }
+.gx-toggle { flex: none; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; color: var(--gx-text2); cursor: pointer; }
+.gx-toggle-off { cursor: default; }
+.gx-toggle svg { transition: transform 0.15s; }
+.gx-prio { flex: none; width: 8px; height: 8px; border-radius: 50%; }
+.gx-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--gx-text2); }
+.gx-name-main { color: var(--gx-text); font-weight: 500; }
+.gx-track { position: relative; flex: none; }
+.gx-bar { position: absolute; border: 1px solid; box-sizing: border-box; overflow: hidden; cursor: pointer; }
+.gx-fill { position: absolute; left: 0; top: 0; bottom: 0; opacity: 0.85; }
+.gx-pct { position: relative; padding-left: 6px; font-size: 0.85em; font-weight: 500; line-height: 1; display: flex; align-items: center; height: 100%; color: var(--gx-text); }
+</style>
