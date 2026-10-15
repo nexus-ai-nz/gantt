@@ -18,6 +18,7 @@ export default {
   },
   triggerEvents: [
     { name: 'task-click', label: label('On task bar click'), event: { value: {} } },
+    { name: 'progress-change', label: label('On progress change (drag on bar)'), event: { value: { id: 0, parentId: null, isSubtask: false, progress: 0, previous: 0, row: {} } } },
     { name: 'client-filter-change', label: label('On client filter change'), event: { value: '' } },
     { name: 'subtask-click', label: label('On subtask bar click'), event: { value: {} } },
   ],
@@ -101,6 +102,8 @@ export default {
     includeToday: toggle('Always include today in range', true),
     defaultExpanded: toggle('Expand tasks by default', true),
     autoParentProgress: toggle('Parent progress = average of subtasks', false),
+    allowProgressEdit: toggle('Allow dragging progress on bars', true),
+    progressStep: num('Progress step when dragging (%)', 5, { min: 1, max: 100 }, 'settings'),
     showToday: toggle('Show today line', true),
     showWeekends: toggle('Shade weekends', true),
     showPriority: toggle('Show priority dot', true),

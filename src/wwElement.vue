@@ -83,11 +83,24 @@
                 class="gx-bar"
                 :style="barStyle(r)"
                 :title="r.tooltip"
+                :class="{ 'gx-editable': r.canEdit, 'gx-dragging': drag && drag.key === r.key }"
                 @click="onBarClick(r)"
               >
                 <div class="gx-fill" :style="{ width: r.progress + '%', background: r.color }" />
                 <span v-if="showProgressLabel && !r.isSub && r.bar.width > 44" class="gx-pct">{{ r.progress }}%</span>
+                <div
+                  v-if="r.canEdit"
+                  class="gx-handle"
+                  :style="{ left: 'clamp(0px, calc(' + r.progress + '% - 6px), calc(100% - 12px))' }"
+                  @pointerdown.stop.prevent="startDrag($event, r)"
+                  @click.stop
+                />
               </div>
+              <div
+                v-if="drag && drag.key === r.key"
+                class="gx-tip"
+                :style="{ left: r.bar.left + (r.bar.width * r.progress) / 100 + 'px' }"
+              >{{ r.progress }}%</div>
             </div>
           </div>
         </div>
@@ -97,7 +110,7 @@
 </template>
 
 <script>
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 const DAY = 86400000;
 const startOfDay = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -149,6 +162,17 @@ export default {
         setSelected = v.setValue;
       }
     } catch (e) { /* preview outside WeWeb */ }
+
+    const overrides = ref({});
+    const drag = ref(null);
+    watch(
+      [() => props.content && props.content.tasks, () => props.content && props.content.subtasks],
+      () => { overrides.value = {}; },
+    );
+    const pOf = (it, pre) => {
+      const v = overrides.value[pre + it.id];
+      return v === undefined ? it.progress : v;
+    };
 
     const openMap = ref({});
     const isOpen = id => (openMap.value[id] !== undefined ? openMap.value[id] : !!c('defaultExpanded', true));
@@ -303,13 +327,13 @@ export default {
       const buildTask = (t, depth) => {
         const subs = subsByTask.value[t.id] || [];
         const open = isOpen('t' + t.id);
-        let progress = t.progress;
+        let progress = pOf(t, 't');
         if (auto && subs.length) {
           const w = subs.map(x => (x.start && x.end ? (x.end - x.start) / DAY + 1 : 1));
           const tot = w.reduce((p, q) => p + q, 0);
-          progress = Math.round(subs.reduce((acc, x, i) => acc + x.progress * w[i], 0) / tot);
+          progress = Math.round(subs.reduce((acc, x, i) => acc + pOf(x, 's') * w[i], 0) / tot);
         }
-        out.push(decorate({ ...t, progress }, { hasChildren: subs.length > 0, open, depth, openKey: 't' + t.id }));
+        out.push(decorate({ ...t, progress }, { hasChildren: subs.length > 0, open, depth, openKey: 't' + t.id, noEdit: auto && subs.length > 0 }));
         if (open) subs.forEach(x => out.push(decorate(x, { depth: depth + 1 })));
       };
       const sorted = [...visibleTasks.value].sort((x, y) => (x.start || 0) - (y.start || 0));
@@ -366,7 +390,9 @@ export default {
       };
     }
 
-    function decorate(it, extra) {
+    function decorate(it0, extra) {
+      const ov = overrides.value[(it0.isSub ? 's' : 't') + it0.id];
+      const it = ov === undefined ? it0 : { ...it0, progress: ov };
       const kind = kindOf(it);
       const color = colorMap.value[kind];
       let bar = null;
@@ -380,6 +406,7 @@ export default {
         depth: 0,
         ...extra,
         key: (it.isSub ? 's' : 't') + it.id,
+        canEdit: !!c('allowProgressEdit', true) && !extra.noEdit && !!bar,
         color,
         prioColor: prioColors.value[Math.min(3, Math.max(1, Math.round(it.priority)))] || prioColors.value[3],
         bar,
@@ -456,6 +483,49 @@ export default {
       return i < 0 || i >= totalDays.value ? null : i * pxPerDay.value + pxPerDay.value / 2;
     });
 
+    const startDrag = (e, r) => {
+      if (!r.canEdit || !r.bar) return;
+      const barEl = e.currentTarget.parentElement;
+      const rect = barEl.getBoundingClientRect();
+      const width = rect.width || r.bar.width;
+      const step = Math.max(1, n('progressStep', 5));
+      const start = r.progress;
+      let last = start;
+      drag.value = { key: r.key };
+      const calc = ev => {
+        const pct = ((ev.clientX - rect.left) / width) * 100;
+        return Math.max(0, Math.min(100, Math.round(pct / step) * step));
+      };
+      const move = ev => {
+        last = calc(ev);
+        overrides.value = { ...overrides.value, [r.key]: last };
+      };
+      const up = () => {
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+        window.removeEventListener('pointercancel', up);
+        drag.value = null;
+        if (last === start) return;
+        const prev = Number(r.raw && r.raw[c('progressField', 'progress')]);
+        emit('trigger-event', {
+          name: 'progress-change',
+          event: {
+            value: {
+              id: r.id,
+              parentId: r.parentId === undefined ? null : r.parentId,
+              isSubtask: !!r.isSub,
+              progress: last,
+              previous: isNaN(prev) ? 0 : prev,
+              row: r.raw,
+            },
+          },
+        });
+      };
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
+      window.addEventListener('pointercancel', up);
+    };
+
     const onBarClick = r => {
       if (r.isClient) return;
       setSelected(r.raw);
@@ -484,7 +554,7 @@ export default {
 
     return {
       errMsg, rows, ticks, months, selectedClient, clientOptions, onClientChange, externalFilter, weekends, todayLeft, totalPx, pxPerDay, leftW, rowH, rootStyle,
-      toggle, onBarClick, barStyle,
+      toggle, onBarClick, barStyle, startDrag, drag,
       showToday: computed(() => !!c('showToday', true)),
       showPriority: computed(() => !!c('showPriority', true)),
       showProgressLabel: computed(() => !!c('showProgressLabel', true)),
@@ -532,6 +602,11 @@ export default {
 .gx-name-main { color: var(--gx-text); font-weight: 500; }
 .gx-track { position: relative; flex: none; }
 .gx-bar { position: absolute; border: 1px solid; box-sizing: border-box; overflow: hidden; cursor: pointer; }
+.gx-handle { position: absolute; top: 0; bottom: 0; width: 12px; cursor: ew-resize; touch-action: none; opacity: 0; z-index: 2; }
+.gx-handle::after { content: ''; position: absolute; left: 4px; right: 4px; top: 15%; bottom: 15%; border-radius: 2px; background: var(--gx-text); opacity: 0.85; }
+.gx-editable:hover .gx-handle, .gx-dragging .gx-handle { opacity: 1; }
+.gx-dragging { cursor: ew-resize; user-select: none; }
+.gx-tip { position: absolute; top: 1px; transform: translateX(-50%); z-index: 6; padding: 1px 6px; font-size: 0.8em; font-weight: 500; line-height: 1.4; color: var(--gx-bg); background: var(--gx-text); border-radius: 4px; pointer-events: none; white-space: nowrap; }
 .gx-fill { position: absolute; left: 0; top: 0; bottom: 0; opacity: 0.85; }
 .gx-pct { position: relative; padding-left: 6px; font-size: 0.85em; font-weight: 500; line-height: 1; display: flex; align-items: center; height: 100%; color: var(--gx-text); }
 </style>
