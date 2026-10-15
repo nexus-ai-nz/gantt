@@ -584,6 +584,11 @@ export default {
       '--gx-head-bg': c('headerBackground', '#f6f7f9'),
       '--gx-text': c('textColor', '#1f2430'),
       '--gx-text2': c('secondaryTextColor', '#6b7280'),
+      '--gx-title': c('taskTextColor', c('textColor', '#1f2430')),
+      '--gx-client-text': c('clientTextColor', c('textColor', '#1f2430')),
+      '--gx-sub-text': c('subtaskTextColor', c('secondaryTextColor', '#6b7280')),
+      '--gx-head-text': c('headerTextColor', c('secondaryTextColor', '#6b7280')),
+      '--gx-bar-text': c('barTextColor', c('textColor', '#1f2430')),
       '--gx-border': c('borderColor', '#e3e6ea'),
       '--gx-grid': c('gridLineColor', '#eef0f3'),
       '--gx-today': c('todayLineColor', '#d64545'),
@@ -620,10 +625,10 @@ export default {
 .gx-inner { position: relative; min-width: 100%; }
 .gx-head { display: flex; position: sticky; top: 0; z-index: 5; background: var(--gx-head-bg); border-bottom: 1px solid var(--gx-border); }
 .gx-left { flex: none; width: var(--gx-left); box-sizing: border-box; position: sticky; left: 0; z-index: 4; background: var(--gx-bg); border-right: 1px solid var(--gx-border); }
-.gx-hleft { background: var(--gx-head-bg); z-index: 6; padding: 0 12px; display: flex; align-items: center; color: var(--gx-text2); }
+.gx-hleft { background: var(--gx-head-bg); z-index: 6; padding: 0 12px; display: flex; align-items: center; color: var(--gx-head-text); }
 .gx-hright { position: relative; flex: none; }
 .gx-months, .gx-ticks { position: relative; height: var(--gx-head-h); }
-.gx-month, .gx-tick { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; padding-left: 6px; box-sizing: border-box; overflow: hidden; white-space: nowrap; color: var(--gx-text2); border-left: 1px solid var(--gx-border); font-size: 0.92em; }
+.gx-month, .gx-tick { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; padding-left: 6px; box-sizing: border-box; overflow: hidden; white-space: nowrap; color: var(--gx-head-text); border-left: 1px solid var(--gx-border); font-size: 0.92em; }
 .gx-tick { border-left-color: var(--gx-grid); border-top: 1px solid var(--gx-grid); }
 .gx-body { position: relative; }
 .gx-layer { position: absolute; top: 0; bottom: 0; z-index: 0; pointer-events: none; }
@@ -638,12 +643,12 @@ export default {
 .gx-toggle svg { transition: transform 0.15s; }
 .gx-clientrow { background: color-mix(in srgb, var(--gx-client-bg) 55%, transparent); }
 .gx-clientrow .gx-left { background: var(--gx-client-bg); }
-.gx-name-client { color: var(--gx-text); font-weight: 600; }
+.gx-name-client { color: var(--gx-client-text); font-weight: 600; }
 .gx-count { flex: none; font-size: 0.85em; color: var(--gx-text2); background: var(--gx-bg); border: 1px solid var(--gx-border); border-radius: 999px; padding: 0 7px; line-height: 1.5; }
-.gx-select { width: 100%; font: inherit; color: var(--gx-text); background: transparent; border: 1px solid var(--gx-border); border-radius: 6px; padding: 3px 6px; }
+.gx-select { width: 100%; font: inherit; color: var(--gx-head-text); background: transparent; border: 1px solid var(--gx-border); border-radius: 6px; padding: 3px 6px; }
 .gx-prio { flex: none; width: 8px; height: 8px; border-radius: 50%; }
-.gx-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--gx-text2); }
-.gx-name-main { color: var(--gx-text); font-weight: 500; }
+.gx-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--gx-sub-text); }
+.gx-name-main { color: var(--gx-title); font-weight: 500; }
 .gx-track { position: relative; flex: none; }
 .gx-bar { position: absolute; border: 1px solid; box-sizing: border-box; overflow: hidden; cursor: pointer; }
 .gx-toast { position: absolute; left: 8px; bottom: 8px; right: 8px; z-index: 20; padding: 6px 10px; border-radius: 6px; font-size: 0.9em; color: #fff; background: #d64545; }
@@ -653,5 +658,5 @@ export default {
 .gx-dragging { cursor: ew-resize; user-select: none; }
 .gx-tip { position: absolute; top: 1px; transform: translateX(-50%); z-index: 6; padding: 1px 6px; font-size: 0.8em; font-weight: 500; line-height: 1.4; color: var(--gx-bg); background: var(--gx-text); border-radius: 4px; pointer-events: none; white-space: nowrap; }
 .gx-fill { position: absolute; left: 0; top: 0; bottom: 0; opacity: 0.85; }
-.gx-pct { position: relative; padding-left: 6px; font-size: 0.85em; font-weight: 500; line-height: 1; display: flex; align-items: center; height: 100%; color: var(--gx-text); }
+.gx-pct { position: relative; padding-left: 6px; font-size: 0.85em; font-weight: 500; line-height: 1; display: flex; align-items: center; height: 100%; color: var(--gx-bar-text); }
 </style>
