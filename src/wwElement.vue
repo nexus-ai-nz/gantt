@@ -519,6 +519,7 @@ export default {
         const res = await client.from(table).update(patch).eq(c('idField', 'id'), r.id).select();
         if (res.error) return fail(res.error.message || 'update failed');
         if (!res.data || !res.data.length) return fail('no row updated (check the table name or the RLS update policy)');
+        emit('trigger-event', { name: 'progress-saved', event: { value: { id: r.id, isSubtask: !!r.isSub, progress: value } } });
       } catch (e) {
         fail((e && e.message) || 'update failed');
       }

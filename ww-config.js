@@ -20,6 +20,7 @@ export default {
     { name: 'task-click', label: label('On task bar click'), event: { value: {} } },
     { name: 'task-progress-change', label: label('On task progress change (drag)'), event: { value: { id: 0, progress: 0, previous: 0, row: {} } } },
     { name: 'subtask-progress-change', label: label('On subtask progress change (drag)'), event: { value: { id: 0, parentId: 0, progress: 0, previous: 0, row: {} } } },
+    { name: 'progress-saved', label: label('On progress saved (use it to refresh collections)'), event: { value: { id: 0, isSubtask: false, progress: 0 } } },
     { name: 'progress-save-error', label: label('On progress save error'), event: { value: { id: 0, isSubtask: false, message: '' } } },
     { name: 'client-filter-change', label: label('On client filter change'), event: { value: '' } },
     { name: 'subtask-click', label: label('On subtask bar click'), event: { value: {} } },

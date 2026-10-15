@@ -30,3 +30,6 @@ Each workflow: Supabase update row, filter `id` = `event.value.id`, set `progres
 By default the component saves dragged progress itself through WeWeb's Supabase connection (no workflow needed).
 Settings: `Save progress to Supabase automatically`, table names, `Column set to now on save`.
 On failure a red message appears and the bar reverts; event `progress-save-error` fires.
+
+## Refreshing other views
+After a successful save the event `progress-saved` fires. Add one workflow on it with two "Fetch collection" actions (Tasks, Subtasks) so Kanban/List views refresh.
