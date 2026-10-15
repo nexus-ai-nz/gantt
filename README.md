@@ -25,3 +25,8 @@ Drag the handle on a bar. Two events fire (use one workflow for each):
 - `task-progress-change`: `event.value.id`, `event.value.progress`
 - `subtask-progress-change`: `event.value.id`, `event.value.parentId`, `event.value.progress`
 Each workflow: Supabase update row, filter `id` = `event.value.id`, set `progress` = `event.value.progress`.
+
+## Automatic save
+By default the component saves dragged progress itself through WeWeb's Supabase connection (no workflow needed).
+Settings: `Save progress to Supabase automatically`, table names, `Column set to now on save`.
+On failure a red message appears and the bar reverts; event `progress-save-error` fires.

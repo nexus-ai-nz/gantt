@@ -1,5 +1,6 @@
 <template>
   <div class="gx" :style="rootStyle">
+    <div v-if="saveError" class="gx-toast">{{ saveError }}</div>
     <div v-if="errMsg" class="gx-empty gx-error">Gantt error — {{ errMsg }}</div>
     <div v-else-if="!rows.length" class="gx-empty">{{ emptyText }}</div>
     <div v-else class="gx-scroll" :style="{ maxHeight: maxHeight || 'none' }">
@@ -483,6 +484,46 @@ export default {
       return i < 0 || i >= totalDays.value ? null : i * pxPerDay.value + pxPerDay.value / 2;
     });
 
+    const saveError = ref('');
+    let toastTimer = null;
+    const showError = msg => {
+      saveError.value = msg;
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => { saveError.value = ''; }, 6000);
+    };
+    const getSupabase = () => {
+      try {
+        if (typeof wwLib === 'undefined') return null;
+        const sb = wwLib.wwPlugins && wwLib.wwPlugins.supabase;
+        return (sb && (sb.instance || sb.client)) || null;
+      } catch (e) {
+        return null;
+      }
+    };
+    const saveProgress = async (r, value) => {
+      if (!c('saveToSupabase', true)) return;
+      const fail = msg => {
+        const o = { ...overrides.value };
+        delete o[r.key];
+        overrides.value = o;
+        showError('Progress not saved: ' + msg);
+        emit('trigger-event', { name: 'progress-save-error', event: { value: { id: r.id, isSubtask: !!r.isSub, message: msg } } });
+      };
+      const client = getSupabase();
+      if (!client) return fail('Supabase connection not found');
+      try {
+        const patch = { [c('progressField', 'progress')]: value };
+        const upd = c('updatedTimeColumn', 'updated_time');
+        if (upd) patch[upd] = new Date().toISOString();
+        const table = r.isSub ? c('subtasksTable', 'subtasks') : c('tasksTable', 'tasks');
+        const res = await client.from(table).update(patch).eq(c('idField', 'id'), r.id).select();
+        if (res.error) return fail(res.error.message || 'update failed');
+        if (!res.data || !res.data.length) return fail('no row updated (check the table name or the RLS update policy)');
+      } catch (e) {
+        fail((e && e.message) || 'update failed');
+      }
+    };
+
     const startDrag = (e, r) => {
       if (!r.canEdit || !r.bar) return;
       setSelected(r.raw);
@@ -508,6 +549,7 @@ export default {
         drag.value = null;
         if (last === start) return;
         const prev = Number(r.raw && r.raw[c('progressField', 'progress')]);
+        saveProgress(r, last);
         emit('trigger-event', {
           name: r.isSub ? 'subtask-progress-change' : 'task-progress-change',
           event: {
@@ -555,7 +597,7 @@ export default {
 
     return {
       errMsg, rows, ticks, months, selectedClient, clientOptions, onClientChange, externalFilter, weekends, todayLeft, totalPx, pxPerDay, leftW, rowH, rootStyle,
-      toggle, onBarClick, barStyle, startDrag, drag,
+      toggle, onBarClick, barStyle, startDrag, drag, saveError,
       showToday: computed(() => !!c('showToday', true)),
       showPriority: computed(() => !!c('showPriority', true)),
       showProgressLabel: computed(() => !!c('showProgressLabel', true)),
@@ -570,7 +612,7 @@ export default {
 </script>
 
 <style scoped>
-.gx { min-height: 60px; background: var(--gx-bg); color: var(--gx-text); border: 1px solid var(--gx-border); border-radius: var(--gx-radius); overflow: hidden; width: 100%; box-sizing: border-box; }
+.gx { position: relative; min-height: 60px; background: var(--gx-bg); color: var(--gx-text); border: 1px solid var(--gx-border); border-radius: var(--gx-radius); overflow: hidden; width: 100%; box-sizing: border-box; }
 .gx-error { color: #d64545; white-space: pre-wrap; }
 .gx-empty { padding: 32px; text-align: center; color: var(--gx-text2); }
 .gx-scroll { overflow: auto; position: relative; }
@@ -603,6 +645,7 @@ export default {
 .gx-name-main { color: var(--gx-text); font-weight: 500; }
 .gx-track { position: relative; flex: none; }
 .gx-bar { position: absolute; border: 1px solid; box-sizing: border-box; overflow: hidden; cursor: pointer; }
+.gx-toast { position: absolute; left: 8px; bottom: 8px; right: 8px; z-index: 20; padding: 6px 10px; border-radius: 6px; font-size: 0.9em; color: #fff; background: #d64545; }
 .gx-handle { position: absolute; top: 0; bottom: 0; width: 12px; cursor: ew-resize; touch-action: none; opacity: 0; z-index: 2; }
 .gx-handle::after { content: ''; position: absolute; left: 4px; right: 4px; top: 15%; bottom: 15%; border-radius: 2px; background: var(--gx-text); opacity: 0.85; }
 .gx-editable:hover .gx-handle, .gx-dragging .gx-handle { opacity: 1; }
