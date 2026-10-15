@@ -19,3 +19,9 @@ Every colour, font, size, row height, bar height and zoom level is a property in
 - Tasks are grouped under a client row (client > tasks > subtasks). Turn off with `Group tasks under their client`.
 - A client dropdown sits in the top-left header. To drive it from your own dropdown instead, bind `Filter by client id`.
 - Event `client-filter-change` fires when the built-in dropdown changes.
+
+## Saving progress
+Drag the handle on a bar. Two events fire (use one workflow for each):
+- `task-progress-change`: `event.value.id`, `event.value.progress`
+- `subtask-progress-change`: `event.value.id`, `event.value.parentId`, `event.value.progress`
+Each workflow: Supabase update row, filter `id` = `event.value.id`, set `progress` = `event.value.progress`.

@@ -508,7 +508,7 @@ export default {
         if (last === start) return;
         const prev = Number(r.raw && r.raw[c('progressField', 'progress')]);
         emit('trigger-event', {
-          name: 'progress-change',
+          name: r.isSub ? 'subtask-progress-change' : 'task-progress-change',
           event: {
             value: {
               id: r.id,

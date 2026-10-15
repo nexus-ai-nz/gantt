@@ -18,7 +18,8 @@ export default {
   },
   triggerEvents: [
     { name: 'task-click', label: label('On task bar click'), event: { value: {} } },
-    { name: 'progress-change', label: label('On progress change (drag on bar)'), event: { value: { id: 0, parentId: null, isSubtask: false, progress: 0, previous: 0, row: {} } } },
+    { name: 'task-progress-change', label: label('On task progress change (drag)'), event: { value: { id: 0, progress: 0, previous: 0, row: {} } } },
+    { name: 'subtask-progress-change', label: label('On subtask progress change (drag)'), event: { value: { id: 0, parentId: 0, progress: 0, previous: 0, row: {} } } },
     { name: 'client-filter-change', label: label('On client filter change'), event: { value: '' } },
     { name: 'subtask-click', label: label('On subtask bar click'), event: { value: {} } },
   ],
