@@ -485,6 +485,7 @@ export default {
 
     const startDrag = (e, r) => {
       if (!r.canEdit || !r.bar) return;
+      setSelected(r.raw);
       const barEl = e.currentTarget.parentElement;
       const rect = barEl.getBoundingClientRect();
       const width = rect.width || r.bar.width;

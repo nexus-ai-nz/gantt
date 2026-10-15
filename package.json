@@ -1,6 +1,6 @@
 {
   "name": "ww-gantt-chart",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "private": true,
   "description": "Gantt chart WeWeb component (tasks + subtasks, fully stylable)",
   "scripts": {
